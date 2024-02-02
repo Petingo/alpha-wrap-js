@@ -1,0 +1,4 @@
+interface AlphaWrap {
+  void AlphaWrap();
+  DOMString wrap(DOMString serializedPoints);
+};
