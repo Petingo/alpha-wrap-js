@@ -27,24 +27,32 @@ AlphaWrap* EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_AlphaWrap_0() {
   return new AlphaWrap();
 }
 
-AlphaWrap* EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_AlphaWrap_2(float alpha, float offset) {
+AlphaWrap* EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_AlphaWrap_2(double alpha, double offset) {
   return new AlphaWrap(alpha, offset);
 }
 
-void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_addPoint_3(AlphaWrap* self, float x, float y, float z) {
-  self->addPoint(x, y, z);
-}
-
-void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_setAlpha_1(AlphaWrap* self, float alpha) {
+void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_setAlpha_1(AlphaWrap* self, double alpha) {
   self->setAlpha(alpha);
 }
 
-void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_setOffset_1(AlphaWrap* self, float offset) {
+void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_setOffset_1(AlphaWrap* self, double offset) {
   self->setOffset(offset);
 }
 
-char* EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_wrap_0(AlphaWrap* self) {
+void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_addPoint_3(AlphaWrap* self, double x, double y, double z) {
+  self->addPoint(x, y, z);
+}
+
+void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_clearPoints_0(AlphaWrap* self) {
+  self->clearPoints();
+}
+
+bool EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_wrap_0(AlphaWrap* self) {
   return self->wrap();
+}
+
+char* EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_getWrappedMeshPly_0(AlphaWrap* self) {
+  return self->getWrappedMeshPly();
 }
 
 void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap___destroy___0(AlphaWrap* self) {

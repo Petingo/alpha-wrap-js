@@ -1,5 +1,7 @@
 #include <iostream>
+#include <fstream>
 #include <CGAL/IO/read_points.h>
+
 #include "alpha_wrap.h"
 
 int main() {
@@ -16,17 +18,33 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    auto serializedPoints = alphaWrap.serializePoints(points);
-
-    // std::cout << serializedPoints << std::endl;
+    std::cout << "Loaded " << points.size() << " points." << std::endl;
 
     for(auto p : points){
         alphaWrap.addPoint(p.x(), p.y(), p.z());
     }
 
-    auto result = alphaWrap.wrap();
+    std::cout << "Start wrapping..." << std::endl;
+    bool succeed = alphaWrap.wrap();
 
-    //    std::cout << result << std::endl;
+    if (!succeed) {
+        std::cout << "Alpha wrap failed." << std::endl;
+        return EXIT_FAILURE;
+    }
 
-    return 0;
+    std::string outputFilename = "output.ply";
+    std::cout << "Alpha wrap succeed. Writing result to " << outputFilename << std::endl;
+
+    // Mesh wrappedMesh = alphaWrap.getWrappedMesh();
+    // CGAL::IO::write_polygon_mesh(output_name, wrappedMesh, CGAL::parameters::stream_precision(17));
+
+    // write serializedMeshPly to output file
+    std::string serializedMeshPly = alphaWrap.getWrappedMeshPly();
+
+    std::ofstream outputFile;
+    outputFile.open(outputFilename);
+    outputFile << serializedMeshPly;
+    outputFile.close();
+
+    return EXIT_SUCCESS;
 }

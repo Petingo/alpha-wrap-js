@@ -217,15 +217,6 @@ AlphaWrap.prototype.__class__ = AlphaWrap;
 AlphaWrap.__cache__ = {};
 Module['AlphaWrap'] = AlphaWrap;
 /** @suppress {undefinedVars, duplicate} @this{Object} */
-AlphaWrap.prototype['addPoint'] = AlphaWrap.prototype.addPoint = function(x, y, z) {
-  var self = this.ptr;
-  if (x && typeof x === 'object') x = x.ptr;
-  if (y && typeof y === 'object') y = y.ptr;
-  if (z && typeof z === 'object') z = z.ptr;
-  _emscripten_bind_AlphaWrap_addPoint_3(self, x, y, z);
-};
-
-/** @suppress {undefinedVars, duplicate} @this{Object} */
 AlphaWrap.prototype['setAlpha'] = AlphaWrap.prototype.setAlpha = function(alpha) {
   var self = this.ptr;
   if (alpha && typeof alpha === 'object') alpha = alpha.ptr;
@@ -240,9 +231,30 @@ AlphaWrap.prototype['setOffset'] = AlphaWrap.prototype.setOffset = function(offs
 };
 
 /** @suppress {undefinedVars, duplicate} @this{Object} */
+AlphaWrap.prototype['addPoint'] = AlphaWrap.prototype.addPoint = function(x, y, z) {
+  var self = this.ptr;
+  if (x && typeof x === 'object') x = x.ptr;
+  if (y && typeof y === 'object') y = y.ptr;
+  if (z && typeof z === 'object') z = z.ptr;
+  _emscripten_bind_AlphaWrap_addPoint_3(self, x, y, z);
+};
+
+/** @suppress {undefinedVars, duplicate} @this{Object} */
+AlphaWrap.prototype['clearPoints'] = AlphaWrap.prototype.clearPoints = function() {
+  var self = this.ptr;
+  _emscripten_bind_AlphaWrap_clearPoints_0(self);
+};
+
+/** @suppress {undefinedVars, duplicate} @this{Object} */
 AlphaWrap.prototype['wrap'] = AlphaWrap.prototype.wrap = function() {
   var self = this.ptr;
-  return UTF8ToString(_emscripten_bind_AlphaWrap_wrap_0(self));
+  return !!(_emscripten_bind_AlphaWrap_wrap_0(self));
+};
+
+/** @suppress {undefinedVars, duplicate} @this{Object} */
+AlphaWrap.prototype['getWrappedMeshPly'] = AlphaWrap.prototype.getWrappedMeshPly = function() {
+  var self = this.ptr;
+  return UTF8ToString(_emscripten_bind_AlphaWrap_getWrappedMeshPly_0(self));
 };
 
 

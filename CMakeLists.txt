@@ -9,8 +9,6 @@ add_definitions(-DCGAL_DISABLE_ROUNDING_MATH_CHECK)  # emscripten doesn't suppor
 set(CGAL_INCLUDE_DIR /home/wsl/CGAL-5.6/include)
 set(BOOST_INCLUDE_DIR /home/wsl/boost_1_84_0)
 
-add_definitions(-DCGAL_AW3_DEBUG_INITIALIZATION)
-
 if (DEFINED EMSCRIPTEN)
     # find_package doesn't work for emscripten:
     # https://github.com/emscripten-core/emscripten/issues/13310
@@ -20,7 +18,9 @@ if (DEFINED EMSCRIPTEN)
     set(MPFR_INCLUDE_DIR /home/wsl/mpfr-em/include)
     set(MPFR_LIBRARIES -L/home/wsl/mpfr-em/lib;libmpfr.a)
 
-    add_executable(alpha_wrap src/alpha_wrap.cpp src/WebIDL/alpha_wrap_glue_wrapper.cpp)
+    add_executable(alpha_wrap src/alpha_wrap.cpp src/WebIDL/alpha_wrap_glue_wrapper.cpp
+            src/serializer.cpp
+            src/serializer.h)
 
     # cgal & boost
     target_include_directories(alpha_wrap PRIVATE ${CGAL_INCLUDE_DIR})
@@ -39,7 +39,9 @@ if (DEFINED EMSCRIPTEN)
 
 
 else()
-    add_executable(alpha_wrap_test src/alpha_wrap_test.cpp src/alpha_wrap.cpp)
+    add_executable(alpha_wrap_test src/alpha_wrap_test.cpp src/alpha_wrap.cpp
+            src/serializer.cpp
+            src/serializer.h)
 
     if(DEFINED TEST_USE_SYSTEM_CGAL_PKG)
         find_package(CGAL REQUIRED)

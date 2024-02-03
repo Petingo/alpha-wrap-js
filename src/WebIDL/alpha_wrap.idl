@@ -1,8 +1,14 @@
 interface AlphaWrap {
     void AlphaWrap();
-    void AlphaWrap(float alpha, float offset);
-    void addPoint(float x, float y, float z);
-    void setAlpha(float alpha);
-    void setOffset(float offset);
-    DOMString wrap();
+    void AlphaWrap(double alpha, double offset);
+
+    void setAlpha(double alpha);
+    void setOffset(double offset);
+
+    void addPoint(double x, double y, double z);
+    void clearPoints();
+
+    boolean wrap();
+
+    DOMString getWrappedMeshPly();
 };

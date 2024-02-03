@@ -9,6 +9,8 @@
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/alpha_wrap_3.h>
 
+#include "serializer.h"
+
 using K = CGAL::Exact_predicates_inexact_constructions_kernel;
 using Point_3 = K::Point_3;
 using Mesh = CGAL::Surface_mesh<Point_3>;
@@ -21,19 +23,22 @@ public:
 
     void setAlpha(const double alpha) { m_relativeAlpha = alpha; };
     void setOffset(const double offset) { m_relativeOffset = offset; }
-    void addPoint(double x, double y, double z);
-    void addSerializedPoints(char* serializedPoints);
 
-    char* wrap();
-    // char* wrap(char* serializedPoints);
-    std::string serializeMesh(Mesh mesh);
-    std::string serializePoints(std::vector<Point_3> points);
-    std::vector<Point_3> deserializePoints(std::string serializedPoints);
+    void clearPoints() { m_vertices.clear(); }
+    void addPoint(double x, double y, double z) { m_vertices.emplace_back(x, y, z); };
+
+    bool wrap();
+
+    Mesh getWrappedMesh() { return m_wrappedMesh; };
+    char* getWrappedMeshPly();
 
 private:
     std::vector<Point_3> m_vertices;
+
     double m_relativeAlpha {10.};
     double m_relativeOffset {300.};
+
+    Mesh m_wrappedMesh;
     std::string m_serializedWrappedMesh;
 };
 
