@@ -202,8 +202,12 @@ VoidPtr.prototype['__destroy__'] = VoidPtr.prototype.__destroy__ = function() {
 // Interface: AlphaWrap
 
 /** @suppress {undefinedVars, duplicate} @this{Object} */
-function AlphaWrap() {
-  this.ptr = _emscripten_bind_AlphaWrap_AlphaWrap_0();
+function AlphaWrap(alpha, offset) {
+  if (alpha && typeof alpha === 'object') alpha = alpha.ptr;
+  if (offset && typeof offset === 'object') offset = offset.ptr;
+  if (alpha === undefined) { this.ptr = _emscripten_bind_AlphaWrap_AlphaWrap_0(alpha); getCache(AlphaWrap)[this.ptr] = this;return }
+  if (offset === undefined) { this.ptr = _emscripten_bind_AlphaWrap_AlphaWrap_1(alpha, offset); getCache(AlphaWrap)[this.ptr] = this;return }
+  this.ptr = _emscripten_bind_AlphaWrap_AlphaWrap_2(alpha, offset);
   getCache(AlphaWrap)[this.ptr] = this;
 };
 
@@ -213,12 +217,32 @@ AlphaWrap.prototype.__class__ = AlphaWrap;
 AlphaWrap.__cache__ = {};
 Module['AlphaWrap'] = AlphaWrap;
 /** @suppress {undefinedVars, duplicate} @this{Object} */
-AlphaWrap.prototype['wrap'] = AlphaWrap.prototype.wrap = function(serializedPoints) {
+AlphaWrap.prototype['addPoint'] = AlphaWrap.prototype.addPoint = function(x, y, z) {
   var self = this.ptr;
-  ensureCache.prepare();
-  if (serializedPoints && typeof serializedPoints === 'object') serializedPoints = serializedPoints.ptr;
-  else serializedPoints = ensureString(serializedPoints);
-  return UTF8ToString(_emscripten_bind_AlphaWrap_wrap_1(self, serializedPoints));
+  if (x && typeof x === 'object') x = x.ptr;
+  if (y && typeof y === 'object') y = y.ptr;
+  if (z && typeof z === 'object') z = z.ptr;
+  _emscripten_bind_AlphaWrap_addPoint_3(self, x, y, z);
+};
+
+/** @suppress {undefinedVars, duplicate} @this{Object} */
+AlphaWrap.prototype['setAlpha'] = AlphaWrap.prototype.setAlpha = function(alpha) {
+  var self = this.ptr;
+  if (alpha && typeof alpha === 'object') alpha = alpha.ptr;
+  _emscripten_bind_AlphaWrap_setAlpha_1(self, alpha);
+};
+
+/** @suppress {undefinedVars, duplicate} @this{Object} */
+AlphaWrap.prototype['setOffset'] = AlphaWrap.prototype.setOffset = function(offset) {
+  var self = this.ptr;
+  if (offset && typeof offset === 'object') offset = offset.ptr;
+  _emscripten_bind_AlphaWrap_setOffset_1(self, offset);
+};
+
+/** @suppress {undefinedVars, duplicate} @this{Object} */
+AlphaWrap.prototype['wrap'] = AlphaWrap.prototype.wrap = function() {
+  var self = this.ptr;
+  return UTF8ToString(_emscripten_bind_AlphaWrap_wrap_0(self));
 };
 
 

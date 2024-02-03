@@ -27,8 +27,24 @@ AlphaWrap* EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_AlphaWrap_0() {
   return new AlphaWrap();
 }
 
-char* EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_wrap_1(AlphaWrap* self, char* serializedPoints) {
-  return self->wrap(serializedPoints);
+AlphaWrap* EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_AlphaWrap_2(float alpha, float offset) {
+  return new AlphaWrap(alpha, offset);
+}
+
+void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_addPoint_3(AlphaWrap* self, float x, float y, float z) {
+  self->addPoint(x, y, z);
+}
+
+void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_setAlpha_1(AlphaWrap* self, float alpha) {
+  self->setAlpha(alpha);
+}
+
+void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_setOffset_1(AlphaWrap* self, float offset) {
+  self->setOffset(offset);
+}
+
+char* EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap_wrap_0(AlphaWrap* self) {
+  return self->wrap();
 }
 
 void EMSCRIPTEN_KEEPALIVE emscripten_bind_AlphaWrap___destroy___0(AlphaWrap* self) {

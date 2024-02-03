@@ -16,22 +16,25 @@ using Mesh = CGAL::Surface_mesh<Point_3>;
 class AlphaWrap {
 public:
     AlphaWrap() = default;
-    char* wrap(char* serializedPoints);
+    AlphaWrap(double relativeAlpha, double relativeOffset):
+        m_relativeAlpha(relativeAlpha), m_relativeOffset(relativeOffset) {};
 
-private:
+    void setAlpha(const double alpha) { m_relativeAlpha = alpha; };
+    void setOffset(const double offset) { m_relativeOffset = offset; }
+    void addPoint(double x, double y, double z);
+    void addSerializedPoints(char* serializedPoints);
+
+    char* wrap();
+    // char* wrap(char* serializedPoints);
+    std::string serializeMesh(Mesh mesh);
+    std::string serializePoints(std::vector<Point_3> points);
     std::vector<Point_3> deserializePoints(std::string serializedPoints);
 
-    Mesh wrapMesh(std::vector<Point_3> points);
-
-    std::string serializeMesh(Mesh wrap);
-
-    std::string serializePoints(std::vector<Point_3> points);
-
 private:
-    double relativeAlpha {10.};
-    double relativeOffset {300.};
-//    std::vector<Point_3> m_points;
-//    Mesh m_wrap;
+    std::vector<Point_3> m_vertices;
+    double m_relativeAlpha {10.};
+    double m_relativeOffset {300.};
+    std::string m_serializedWrappedMesh;
 };
 
 

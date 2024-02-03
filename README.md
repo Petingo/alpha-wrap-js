@@ -14,3 +14,4 @@ cmake --build . --target alpha_wrap
 ## Reference
 - [Official tutorial](https://emscripten.org/docs/porting/connecting_cpp_and_javascript/WebIDL-Binder.html)
 - [Another tutorial (Chinese)](https://874656645.github.io/posts/159-emscripten-%E4%BD%BF%E7%94%A8-webidl-binder-%E7%BB%91%E5%AE%9A-c++-%E4%BB%A3%E7%A0%81/)
+- [GMP, MPFR](https://stackoverflow.com/questions/41080815/compiling-gmp-mpfr-with-emscripten)
