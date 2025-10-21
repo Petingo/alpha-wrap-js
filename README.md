@@ -20,6 +20,13 @@ cmake --build . --target alpha_wrap
 `alpha_wrap.js` and `alpha_wrap.wasm` will be generated.
 
 
+## Example
+- Before wrapping
+![](point_cloud.png)
+- After wrapping
+![](mesh.png)
+
+
 ## Note
 - The orientation() return different value in WebAssembly
   - `CGAL/predicates/kernel_ftC3.h`

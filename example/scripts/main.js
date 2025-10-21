@@ -407,7 +407,14 @@ createAlphaWrapModule().then(
             alphaWrap.addPoint(parseFloat(p[0]), parseFloat(p[1]), parseFloat(p[2]));
         }
 
-        try {
+        
+    }
+)
+function tryWrap(){
+    console.log("meow")
+
+    try {
+        console.log("meowww2")
             let s = alphaWrap.wrap();
             console.log(s);
 
@@ -427,11 +434,6 @@ createAlphaWrapModule().then(
         } catch (e) {
             console.log(e)
         }
-
-    }
-)
-function tryWrap(){
-    console.log("meow")
 }
 //     alphaWrap.setAlpha(alphaWrapParams.alpha);
 //     alphaWrap.setOffset(alphaWrapParams.offset);
@@ -461,6 +463,9 @@ gui.add(alphaWrapParams, 'offset', 0, 1000).onFinishChange( (value) => {
 gui.add(alphaWrapParams, 'wrap').onChange( (value) => {
     console.log("meow");
     alphaWrapParams.wrapStatus = "Wrapping..."
+
+    
+
 
 });
 gui.add(alphaWrapParams, 'wrapStatus');
