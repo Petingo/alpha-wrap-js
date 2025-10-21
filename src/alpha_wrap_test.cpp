@@ -8,7 +8,7 @@ int main() {
     AlphaWrap alphaWrap;
 
     // Read the input
-    const std::string filename = CGAL::data_file_path("/home/wsl/alpha-wrap-js/misc/cube_sphere.ply");
+    const std::string filename = CGAL::data_file_path("/home/wsl/alpha-wrap-js/example/assets/cube_sphere.ply");
 
     std::cout << "Reading " << filename << "..." << std::endl;
     std::vector<Point_3> points;

@@ -1,11 +1,11 @@
 interface AlphaWrap {
     void AlphaWrap();
-    void AlphaWrap(double alpha, double offset);
+    void AlphaWrap(float alpha, float offset);
 
-    void setAlpha(double alpha);
-    void setOffset(double offset);
+    void setAlpha(float alpha);
+    void setOffset(float offset);
 
-    void addPoint(double x, double y, double z);
+    void addPoint(float x, float y, float z);
     void clearPoints();
 
     boolean wrap();

@@ -4,7 +4,21 @@ project(alpha_wrap_js)
 set(CMAKE_CXX_STANDARD 17)
 
 add_definitions(-DCGAL_DISABLE_ROUNDING_MATH_CHECK)  # emscripten doesn't support -frounding-math
-# add_definitions(-DTEST_USE_SYSTEM_CGAL_PKG)
+add_definitions(-DCGAL_USE_SSE2)
+#add_definitions(-DCGAL_ALWAYS_ROUND_TO_NEAREST)
+add_definitions(-DCGAL_HAS_NO_THREADS)
+add_definitions(-DCGAL_NO_ASSERTIONS)
+add_definitions(-DCGAL_FORWARD)
+add_definitions(-DBOOST_MATH_DISABLE_STD_FPCLASSIFY)
+add_definitions(-DBOOST_NO_NATIVE_LONG_DOUBLE_FP_CLASSIFY)
+add_definitions(-DBOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS)
+
+#
+
+#add_definitions(-DCGAL_FPU_HAS_EXCESS_PRECISION)
+
+add_definitions(-DCGAL_AW3_DEBUG_INITIALIZATION)
+add_definitions(-DCGAL_AW3_DEBUG_DUMP_EVERY_STEP)
 
 set(CGAL_INCLUDE_DIR /home/wsl/CGAL-5.6/include)
 set(BOOST_INCLUDE_DIR /home/wsl/boost_1_84_0)
@@ -18,7 +32,9 @@ if (DEFINED EMSCRIPTEN)
     set(MPFR_INCLUDE_DIR /home/wsl/mpfr-em/include)
     set(MPFR_LIBRARIES -L/home/wsl/mpfr-em/lib;libmpfr.a)
 
-    add_executable(alpha_wrap src/alpha_wrap.cpp src/WebIDL/alpha_wrap_glue_wrapper.cpp
+    add_executable(alpha_wrap
+            src/alpha_wrap.cpp
+            src/WebIDL/alpha_wrap_glue_wrapper.cpp
             src/serializer.cpp
             src/serializer.h)
 
@@ -35,13 +51,24 @@ if (DEFINED EMSCRIPTEN)
     target_link_libraries(alpha_wrap PRIVATE ${GMP_LIBRARIES})
 
     set(CMAKE_EXECUTABLE_SUFFIX ".js")
-    set_target_properties(alpha_wrap PROPERTIES LINK_FLAGS  "-O2 -s MODULARIZE --post-js ../src/WebIDL/alpha_wrap_glue.js")
+    set_target_properties(alpha_wrap PROPERTIES LINK_FLAGS "-s MODULARIZE -s 'EXPORT_NAME=\"createAlphaWrapModule\"' -s EXPORT_ES6=1 --post-js ../src/WebIDL/alpha_wrap_glue.js --ignore-dynamic-linking ")
+    set_target_properties(alpha_wrap PROPERTIES COMPILE_FLAGS "-g -O0 -msimd128 -msse2 -v -U__GNUG__")
+#    set_target_properties(alpha_wrap PROPERTIES LINK_FLAGS )
+
+
+    add_executable(test src/test.cpp)
+    set_target_properties(test PROPERTIES COMPILE_FLAGS "-msimd128 -msse2 -s MODULARIZE -s 'EXPORT_NAME=\"createAlphaWrapModule\"' -s EXPORT_ES6=1 --post-js ../src/WebIDL/alpha_wrap_glue.js")
 
 
 else()
-    add_executable(alpha_wrap_test src/alpha_wrap_test.cpp src/alpha_wrap.cpp
+
+    add_executable(alpha_wrap_test
+            src/alpha_wrap_test.cpp
+            src/alpha_wrap.cpp
             src/serializer.cpp
-            src/serializer.h)
+            src/serializer.h
+            src/test.cpp
+            src/test.h)
 
     if(DEFINED TEST_USE_SYSTEM_CGAL_PKG)
         find_package(CGAL REQUIRED)

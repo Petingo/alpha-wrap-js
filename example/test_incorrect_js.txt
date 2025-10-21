@@ -1,0 +1,12 @@
+Insert Bbox vertices
+ 	 > a
+ 	 > b
+ 	 > c
+ 	 > d
+ 	 > e
+ d / a / b / e
+ 	 > f
+ e / a / b / f
+ d / b / c / e
+ d / a / b / e
+ e / d / a / f

@@ -5,7 +5,7 @@
 #ifndef ALPHA_WRAP_JS_ALPHA_WRAP_H
 #define ALPHA_WRAP_JS_ALPHA_WRAP_H
 
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/alpha_wrap_3.h>
 
