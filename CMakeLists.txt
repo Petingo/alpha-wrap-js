@@ -3,9 +3,6 @@ project(alpha_wrap_js)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_definitions(-DCGAL_DISABLE_ROUNDING_MATH_CHECK)  # emscripten doesn't support -frounding-math
-add_definitions(-DCGAL_USE_SSE2)
-#add_definitions(-DCGAL_ALWAYS_ROUND_TO_NEAREST)
 add_definitions(-DCGAL_HAS_NO_THREADS)
 add_definitions(-DCGAL_NO_ASSERTIONS)
 add_definitions(-DCGAL_FORWARD)
@@ -13,17 +10,16 @@ add_definitions(-DBOOST_MATH_DISABLE_STD_FPCLASSIFY)
 add_definitions(-DBOOST_NO_NATIVE_LONG_DOUBLE_FP_CLASSIFY)
 add_definitions(-DBOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS)
 
-#
-
-#add_definitions(-DCGAL_FPU_HAS_EXCESS_PRECISION)
-
-add_definitions(-DCGAL_AW3_DEBUG_INITIALIZATION)
-add_definitions(-DCGAL_AW3_DEBUG_DUMP_EVERY_STEP)
-
 set(CGAL_INCLUDE_DIR /home/wsl/CGAL-5.6/include)
 set(BOOST_INCLUDE_DIR /home/wsl/boost_1_84_0)
 
 if (DEFINED EMSCRIPTEN)
+    # emscripten doesn't support -frounding-math or FPU rounding mode control.
+    # CGAL_ALWAYS_ROUND_TO_NEAREST makes interval arithmetic use nextafter()
+    # instead of relying on FPU rounding modes.
+    add_definitions(-DCGAL_DISABLE_ROUNDING_MATH_CHECK)
+    add_definitions(-DCGAL_ALWAYS_ROUND_TO_NEAREST)
+
     # find_package doesn't work for emscripten:
     # https://github.com/emscripten-core/emscripten/issues/13310
 
@@ -51,8 +47,8 @@ if (DEFINED EMSCRIPTEN)
     target_link_libraries(alpha_wrap PRIVATE ${GMP_LIBRARIES})
 
     set(CMAKE_EXECUTABLE_SUFFIX ".js")
-    set_target_properties(alpha_wrap PROPERTIES LINK_FLAGS "-s MODULARIZE -s 'EXPORT_NAME=\"createAlphaWrapModule\"' -s EXPORT_ES6=1 --post-js ../src/WebIDL/alpha_wrap_glue.js --ignore-dynamic-linking ")
-    set_target_properties(alpha_wrap PROPERTIES COMPILE_FLAGS "-g -O0 -msimd128 -msse2 -v -U__GNUG__")
+    set_target_properties(alpha_wrap PROPERTIES LINK_FLAGS "-s MODULARIZE -s 'EXPORT_NAME=\"createAlphaWrapModule\"' -s EXPORT_ES6=1 -sNO_DISABLE_EXCEPTION_CATCHING --post-js ../src/WebIDL/alpha_wrap_glue.js --ignore-dynamic-linking ")
+    set_target_properties(alpha_wrap PROPERTIES COMPILE_FLAGS "-g -O0 -msimd128 -msse2 -fexceptions -v -U__GNUG__")
 #    set_target_properties(alpha_wrap PROPERTIES LINK_FLAGS )
 
 

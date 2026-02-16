@@ -27,7 +27,7 @@ Module['ready'] = new Promise((resolve, reject) => {
   readyPromiseResolve = resolve;
   readyPromiseReject = reject;
 });
-["_memory","___indirect_function_table","_webidl_free","_webidl_malloc","_emscripten_bind_VoidPtr___destroy___0","_emscripten_bind_AlphaWrap_AlphaWrap_0","_emscripten_bind_AlphaWrap_AlphaWrap_2","_emscripten_bind_AlphaWrap_setAlpha_1","_emscripten_bind_AlphaWrap_setOffset_1","_emscripten_bind_AlphaWrap_addPoint_3","_emscripten_bind_AlphaWrap_clearPoints_0","_emscripten_bind_AlphaWrap_wrap_0","_emscripten_bind_AlphaWrap_getWrappedMeshPly_0","_emscripten_bind_AlphaWrap___destroy___0","___em_lib_deps_webidl_binder","onRuntimeInitialized"].forEach((prop) => {
+["getExceptionMessage","$incrementExceptionRefcount","$decrementExceptionRefcount","_memory","___indirect_function_table","_webidl_free","_webidl_malloc","_emscripten_bind_VoidPtr___destroy___0","_emscripten_bind_AlphaWrap_AlphaWrap_0","_emscripten_bind_AlphaWrap_AlphaWrap_2","_emscripten_bind_AlphaWrap_setAlpha_1","_emscripten_bind_AlphaWrap_setOffset_1","_emscripten_bind_AlphaWrap_addPoint_3","_emscripten_bind_AlphaWrap_clearPoints_0","_emscripten_bind_AlphaWrap_wrap_0","_emscripten_bind_AlphaWrap_getWrappedMeshPly_0","_emscripten_bind_AlphaWrap___destroy___0","___em_lib_deps_webidl_binder","onRuntimeInitialized"].forEach((prop) => {
   if (!Object.getOwnPropertyDescriptor(Module['ready'], prop)) {
     Object.defineProperty(Module['ready'], prop, {
       get: () => abort('You are getting ' + prop + ' on the Promise object, instead of the instance. Use .then() to get called back with the instance, see the MODULARIZE docs in src/settings.js'),
@@ -397,10 +397,6 @@ function assert(condition, text) {
 function _malloc() {
   abort('malloc() called but not included in the build - add `_malloc` to EXPORTED_FUNCTIONS');
 }
-function _free() {
-  // Show a helpful error since we used to include free by default in the past.
-  abort('free() called but not included in the build - add `_free` to EXPORTED_FUNCTIONS');
-}
 
 // Memory management
 
@@ -707,6 +703,20 @@ function createExportWrapper(name) {
 }
 
 // include: runtime_exceptions.js
+// Base Emscripten EH error class
+class EmscriptenEH extends Error {}
+
+class EmscriptenSjLj extends EmscriptenEH {}
+
+class CppException extends EmscriptenEH {
+  constructor(excPtr) {
+    super(excPtr);
+    this.excPtr = excPtr;
+    const excInfo = getExceptionMessage(excPtr);
+    this.name = excInfo[0];
+    this.message = excInfo[1];
+  }
+}
 // end include: runtime_exceptions.js
 var wasmBinaryFile;
 if (Module['locateFile']) {
@@ -1001,65 +1011,19 @@ function dbg(...args) {
       }
     };
 
-  
-    /**
-     * @param {number} ptr
-     * @param {string} type
-     */
-  function getValue(ptr, type = 'i8') {
-    if (type.endsWith('*')) type = '*';
-    switch (type) {
-      case 'i1': return HEAP8[ptr];
-      case 'i8': return HEAP8[ptr];
-      case 'i16': return HEAP16[((ptr)>>1)];
-      case 'i32': return HEAP32[((ptr)>>2)];
-      case 'i64': abort('to do getValue(i64) use WASM_BIGINT');
-      case 'float': return HEAPF32[((ptr)>>2)];
-      case 'double': return HEAPF64[((ptr)>>3)];
-      case '*': return HEAPU32[((ptr)>>2)];
-      default: abort(`invalid type for getValue: ${type}`);
-    }
-  }
-
-  var noExitRuntime = Module['noExitRuntime'] || true;
-
-  var ptrToString = (ptr) => {
-      assert(typeof ptr === 'number');
-      // With CAN_ADDRESS_2GB or MEMORY64, pointers are already unsigned.
-      ptr >>>= 0;
-      return '0x' + ptr.toString(16).padStart(8, '0');
-    };
+  var decrementExceptionRefcount = (ptr) => ___cxa_decrement_exception_refcount(ptr);
 
   
-    /**
-     * @param {number} ptr
-     * @param {number} value
-     * @param {string} type
-     */
-  function setValue(ptr, value, type = 'i8') {
-    if (type.endsWith('*')) type = '*';
-    switch (type) {
-      case 'i1': HEAP8[ptr] = value; break;
-      case 'i8': HEAP8[ptr] = value; break;
-      case 'i16': HEAP16[((ptr)>>1)] = value; break;
-      case 'i32': HEAP32[((ptr)>>2)] = value; break;
-      case 'i64': abort('to do setValue(i64) use WASM_BIGINT');
-      case 'float': HEAPF32[((ptr)>>2)] = value; break;
-      case 'double': HEAPF64[((ptr)>>3)] = value; break;
-      case '*': HEAPU32[((ptr)>>2)] = value; break;
-      default: abort(`invalid type for setValue: ${type}`);
-    }
-  }
-
-  var warnOnce = (text) => {
-      warnOnce.shown ||= {};
-      if (!warnOnce.shown[text]) {
-        warnOnce.shown[text] = 1;
-        if (ENVIRONMENT_IS_NODE) text = 'warning: ' + text;
-        err(text);
-      }
+  
+  
+  var withStackSave = (f) => {
+      var stack = stackSave();
+      var ret = f();
+      stackRestore(stack);
+      return ret;
     };
-
+  
+  
   var UTF8Decoder = typeof TextDecoder != 'undefined' ? new TextDecoder('utf8') : undefined;
   
     /**
@@ -1133,6 +1097,85 @@ function dbg(...args) {
       assert(typeof ptr == 'number', `UTF8ToString expects a number (got ${typeof ptr})`);
       return ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead) : '';
     };
+  var getExceptionMessageCommon = (ptr) => withStackSave(() => {
+      var type_addr_addr = stackAlloc(4);
+      var message_addr_addr = stackAlloc(4);
+      ___get_exception_message(ptr, type_addr_addr, message_addr_addr);
+      var type_addr = HEAPU32[((type_addr_addr)>>2)];
+      var message_addr = HEAPU32[((message_addr_addr)>>2)];
+      var type = UTF8ToString(type_addr);
+      _free(type_addr);
+      var message;
+      if (message_addr) {
+        message = UTF8ToString(message_addr);
+        _free(message_addr);
+      }
+      return [type, message];
+    });
+  var getExceptionMessage = (ptr) => getExceptionMessageCommon(ptr);
+  Module['getExceptionMessage'] = getExceptionMessage;
+
+  
+    /**
+     * @param {number} ptr
+     * @param {string} type
+     */
+  function getValue(ptr, type = 'i8') {
+    if (type.endsWith('*')) type = '*';
+    switch (type) {
+      case 'i1': return HEAP8[ptr];
+      case 'i8': return HEAP8[ptr];
+      case 'i16': return HEAP16[((ptr)>>1)];
+      case 'i32': return HEAP32[((ptr)>>2)];
+      case 'i64': abort('to do getValue(i64) use WASM_BIGINT');
+      case 'float': return HEAPF32[((ptr)>>2)];
+      case 'double': return HEAPF64[((ptr)>>3)];
+      case '*': return HEAPU32[((ptr)>>2)];
+      default: abort(`invalid type for getValue: ${type}`);
+    }
+  }
+
+  var incrementExceptionRefcount = (ptr) => ___cxa_increment_exception_refcount(ptr);
+
+  var noExitRuntime = Module['noExitRuntime'] || true;
+
+  var ptrToString = (ptr) => {
+      assert(typeof ptr === 'number');
+      // With CAN_ADDRESS_2GB or MEMORY64, pointers are already unsigned.
+      ptr >>>= 0;
+      return '0x' + ptr.toString(16).padStart(8, '0');
+    };
+
+  
+    /**
+     * @param {number} ptr
+     * @param {number} value
+     * @param {string} type
+     */
+  function setValue(ptr, value, type = 'i8') {
+    if (type.endsWith('*')) type = '*';
+    switch (type) {
+      case 'i1': HEAP8[ptr] = value; break;
+      case 'i8': HEAP8[ptr] = value; break;
+      case 'i16': HEAP16[((ptr)>>1)] = value; break;
+      case 'i32': HEAP32[((ptr)>>2)] = value; break;
+      case 'i64': abort('to do setValue(i64) use WASM_BIGINT');
+      case 'float': HEAPF32[((ptr)>>2)] = value; break;
+      case 'double': HEAPF64[((ptr)>>3)] = value; break;
+      case '*': HEAPU32[((ptr)>>2)] = value; break;
+      default: abort(`invalid type for setValue: ${type}`);
+    }
+  }
+
+  var warnOnce = (text) => {
+      warnOnce.shown ||= {};
+      if (!warnOnce.shown[text]) {
+        warnOnce.shown[text] = 1;
+        if (ENVIRONMENT_IS_NODE) text = 'warning: ' + text;
+        err(text);
+      }
+    };
+
   var ___assert_fail = (condition, filename, line, func) => {
       abort(`Assertion failed: ${UTF8ToString(condition)}, at: ` + [filename ? UTF8ToString(filename) : 'unknown filename', line, func ? UTF8ToString(func) : 'unknown function']);
     };
@@ -1151,6 +1194,38 @@ function dbg(...args) {
     };
   var ___call_sighandler = (fp, sig) => getWasmTableEntry(fp)(sig);
 
+  var exceptionCaught =  [];
+  
+  
+  var uncaughtExceptionCount = 0;
+  var ___cxa_begin_catch = (ptr) => {
+      var info = new ExceptionInfo(ptr);
+      if (!info.get_caught()) {
+        info.set_caught(true);
+        uncaughtExceptionCount--;
+      }
+      info.set_rethrown(false);
+      exceptionCaught.push(info);
+      ___cxa_increment_exception_refcount(info.excPtr);
+      return info.get_exception_ptr();
+    };
+
+  
+  var exceptionLast = 0;
+  
+  
+  var ___cxa_end_catch = () => {
+      // Clear state flag.
+      _setThrew(0, 0);
+      assert(exceptionCaught.length > 0);
+      // Call destructor if one is registered then clear it.
+      var info = exceptionCaught.pop();
+  
+      ___cxa_decrement_exception_refcount(info.excPtr);
+      exceptionLast = 0; // XXX in decRef?
+    };
+
+  
   class ExceptionInfo {
       // excPtr - Thrown object pointer to wrap. Metadata pointer is calculated from it.
       constructor(excPtr) {
@@ -1224,17 +1299,209 @@ function dbg(...args) {
       }
     }
   
-  var exceptionLast = 0;
+  var ___resumeException = (ptr) => {
+      if (!exceptionLast) {
+        exceptionLast = new CppException(ptr);
+      }
+      throw exceptionLast;
+    };
   
-  var uncaughtExceptionCount = 0;
+  
+  var findMatchingCatch = (args) => {
+      var thrown =
+        exceptionLast?.excPtr;
+      if (!thrown) {
+        // just pass through the null ptr
+        setTempRet0(0);
+        return 0;
+      }
+      var info = new ExceptionInfo(thrown);
+      info.set_adjusted_ptr(thrown);
+      var thrownType = info.get_type();
+      if (!thrownType) {
+        // just pass through the thrown ptr
+        setTempRet0(0);
+        return thrown;
+      }
+  
+      // can_catch receives a **, add indirection
+      // The different catch blocks are denoted by different types.
+      // Due to inheritance, those types may not precisely match the
+      // type of the thrown object. Find one which matches, and
+      // return the type of the catch block which should be called.
+      for (var arg in args) {
+        var caughtType = args[arg];
+  
+        if (caughtType === 0 || caughtType === thrownType) {
+          // Catch all clause matched or exactly the same type is caught
+          break;
+        }
+        var adjusted_ptr_addr = info.ptr + 16;
+        if (___cxa_can_catch(caughtType, thrownType, adjusted_ptr_addr)) {
+          setTempRet0(caughtType);
+          return thrown;
+        }
+      }
+      setTempRet0(thrownType);
+      return thrown;
+    };
+  var ___cxa_find_matching_catch_2 = () => findMatchingCatch([]);
+
+  var ___cxa_find_matching_catch_3 = (arg0) => findMatchingCatch([arg0]);
+
+  
+  
+  var ___cxa_rethrow = () => {
+      var info = exceptionCaught.pop();
+      if (!info) {
+        abort('no exception to throw');
+      }
+      var ptr = info.excPtr;
+      if (!info.get_rethrown()) {
+        // Only pop if the corresponding push was through rethrow_primary_exception
+        exceptionCaught.push(info);
+        info.set_rethrown(true);
+        info.set_caught(false);
+        uncaughtExceptionCount++;
+      }
+      exceptionLast = new CppException(ptr);
+      throw exceptionLast;
+    };
+
+  
+  
   var ___cxa_throw = (ptr, type, destructor) => {
       var info = new ExceptionInfo(ptr);
       // Initialize ExceptionInfo content after it was allocated in __cxa_allocate_exception.
       info.init(type, destructor);
-      exceptionLast = ptr;
+      exceptionLast = new CppException(ptr);
       uncaughtExceptionCount++;
-      assert(false, 'Exception thrown, but exception catching is not enabled. Compile with -sNO_DISABLE_EXCEPTION_CATCHING or -sEXCEPTION_CATCHING_ALLOWED=[..] to catch.');
+      throw exceptionLast;
     };
+
+  var ___cxa_uncaught_exceptions = () => uncaughtExceptionCount;
+
+
+  var __emscripten_runtime_keepalive_clear = () => {
+      noExitRuntime = false;
+      runtimeKeepaliveCounter = 0;
+    };
+
+  var _abort = () => {
+      abort('native code called abort()');
+    };
+
+  var _emscripten_date_now = () => Date.now();
+
+  var _emscripten_memcpy_js = (dest, src, num) => HEAPU8.copyWithin(dest, src, src + num);
+
+  var getHeapMax = () =>
+      HEAPU8.length;
+  
+  var abortOnCannotGrowMemory = (requestedSize) => {
+      abort(`Cannot enlarge memory arrays to size ${requestedSize} bytes (OOM). Either (1) compile with -sINITIAL_MEMORY=X with X higher than the current value ${HEAP8.length}, (2) compile with -sALLOW_MEMORY_GROWTH which allows increasing the size at runtime, or (3) if you want malloc to return NULL (0) instead of this abort, compile with -sABORTING_MALLOC=0`);
+    };
+  var _emscripten_resize_heap = (requestedSize) => {
+      var oldSize = HEAPU8.length;
+      // With CAN_ADDRESS_2GB or MEMORY64, pointers are already unsigned.
+      requestedSize >>>= 0;
+      abortOnCannotGrowMemory(requestedSize);
+    };
+
+  var ENV = {
+  };
+  
+  var getExecutableName = () => {
+      return thisProgram || './this.program';
+    };
+  var getEnvStrings = () => {
+      if (!getEnvStrings.strings) {
+        // Default values.
+        // Browser language detection #8751
+        var lang = ((typeof navigator == 'object' && navigator.languages && navigator.languages[0]) || 'C').replace('-', '_') + '.UTF-8';
+        var env = {
+          'USER': 'web_user',
+          'LOGNAME': 'web_user',
+          'PATH': '/',
+          'PWD': '/',
+          'HOME': '/home/web_user',
+          'LANG': lang,
+          '_': getExecutableName()
+        };
+        // Apply the user-provided values, if any.
+        for (var x in ENV) {
+          // x is a key in ENV; if ENV[x] is undefined, that means it was
+          // explicitly set to be so. We allow user code to do that to
+          // force variables with default values to remain unset.
+          if (ENV[x] === undefined) delete env[x];
+          else env[x] = ENV[x];
+        }
+        var strings = [];
+        for (var x in env) {
+          strings.push(`${x}=${env[x]}`);
+        }
+        getEnvStrings.strings = strings;
+      }
+      return getEnvStrings.strings;
+    };
+  
+  var stringToAscii = (str, buffer) => {
+      for (var i = 0; i < str.length; ++i) {
+        assert(str.charCodeAt(i) === (str.charCodeAt(i) & 0xff));
+        HEAP8[buffer++] = str.charCodeAt(i);
+      }
+      // Null-terminate the string
+      HEAP8[buffer] = 0;
+    };
+  var _environ_get = (__environ, environ_buf) => {
+      var bufSize = 0;
+      getEnvStrings().forEach((string, i) => {
+        var ptr = environ_buf + bufSize;
+        HEAPU32[(((__environ)+(i*4))>>2)] = ptr;
+        stringToAscii(string, ptr);
+        bufSize += string.length + 1;
+      });
+      return 0;
+    };
+
+  var _environ_sizes_get = (penviron_count, penviron_buf_size) => {
+      var strings = getEnvStrings();
+      HEAPU32[((penviron_count)>>2)] = strings.length;
+      var bufSize = 0;
+      strings.forEach((string) => bufSize += string.length + 1);
+      HEAPU32[((penviron_buf_size)>>2)] = bufSize;
+      return 0;
+    };
+
+  
+  var runtimeKeepaliveCounter = 0;
+  var keepRuntimeAlive = () => noExitRuntime || runtimeKeepaliveCounter > 0;
+  var _proc_exit = (code) => {
+      EXITSTATUS = code;
+      if (!keepRuntimeAlive()) {
+        Module['onExit']?.(code);
+        ABORT = true;
+      }
+      quit_(code, new ExitStatus(code));
+    };
+  
+  /** @suppress {duplicate } */
+  /** @param {boolean|number=} implicit */
+  var exitJS = (status, implicit) => {
+      EXITSTATUS = status;
+  
+      checkUnflushedContent();
+  
+      // if exit() was called explicitly, warn the user if the runtime isn't actually being shut down
+      if (keepRuntimeAlive() && !implicit) {
+        var msg = `program exited (with status: ${status}), but keepRuntimeAlive() is set (counter=${runtimeKeepaliveCounter}) due to an async operation, so halting execution but not exiting the runtime or preventing further async execution (you can use emscripten_force_exit, if you want to force a true shutdown)`;
+        readyPromiseReject(msg);
+        err(msg);
+      }
+  
+      _proc_exit(status);
+    };
+  var _exit = exitJS;
 
   var PATH = {
   isAbs:(path) => path.charAt(0) === '/',
@@ -4020,282 +4287,6 @@ function dbg(...args) {
         return stream;
       },
   };
-  function ___syscall_fcntl64(fd, cmd, varargs) {
-  SYSCALLS.varargs = varargs;
-  try {
-  
-      var stream = SYSCALLS.getStreamFromFD(fd);
-      switch (cmd) {
-        case 0: {
-          var arg = SYSCALLS.get();
-          if (arg < 0) {
-            return -28;
-          }
-          while (FS.streams[arg]) {
-            arg++;
-          }
-          var newStream;
-          newStream = FS.dupStream(stream, arg);
-          return newStream.fd;
-        }
-        case 1:
-        case 2:
-          return 0;  // FD_CLOEXEC makes no sense for a single process.
-        case 3:
-          return stream.flags;
-        case 4: {
-          var arg = SYSCALLS.get();
-          stream.flags |= arg;
-          return 0;
-        }
-        case 12: {
-          var arg = SYSCALLS.getp();
-          var offset = 0;
-          // We're always unlocked.
-          HEAP16[(((arg)+(offset))>>1)] = 2;
-          return 0;
-        }
-        case 13:
-        case 14:
-          return 0; // Pretend that the locking is successful.
-      }
-      return -28;
-    } catch (e) {
-    if (typeof FS == 'undefined' || !(e.name === 'ErrnoError')) throw e;
-    return -e.errno;
-  }
-  }
-
-  function ___syscall_ioctl(fd, op, varargs) {
-  SYSCALLS.varargs = varargs;
-  try {
-  
-      var stream = SYSCALLS.getStreamFromFD(fd);
-      switch (op) {
-        case 21509: {
-          if (!stream.tty) return -59;
-          return 0;
-        }
-        case 21505: {
-          if (!stream.tty) return -59;
-          if (stream.tty.ops.ioctl_tcgets) {
-            var termios = stream.tty.ops.ioctl_tcgets(stream);
-            var argp = SYSCALLS.getp();
-            HEAP32[((argp)>>2)] = termios.c_iflag || 0;
-            HEAP32[(((argp)+(4))>>2)] = termios.c_oflag || 0;
-            HEAP32[(((argp)+(8))>>2)] = termios.c_cflag || 0;
-            HEAP32[(((argp)+(12))>>2)] = termios.c_lflag || 0;
-            for (var i = 0; i < 32; i++) {
-              HEAP8[(argp + i)+(17)] = termios.c_cc[i] || 0;
-            }
-            return 0;
-          }
-          return 0;
-        }
-        case 21510:
-        case 21511:
-        case 21512: {
-          if (!stream.tty) return -59;
-          return 0; // no-op, not actually adjusting terminal settings
-        }
-        case 21506:
-        case 21507:
-        case 21508: {
-          if (!stream.tty) return -59;
-          if (stream.tty.ops.ioctl_tcsets) {
-            var argp = SYSCALLS.getp();
-            var c_iflag = HEAP32[((argp)>>2)];
-            var c_oflag = HEAP32[(((argp)+(4))>>2)];
-            var c_cflag = HEAP32[(((argp)+(8))>>2)];
-            var c_lflag = HEAP32[(((argp)+(12))>>2)];
-            var c_cc = []
-            for (var i = 0; i < 32; i++) {
-              c_cc.push(HEAP8[(argp + i)+(17)]);
-            }
-            return stream.tty.ops.ioctl_tcsets(stream.tty, op, { c_iflag, c_oflag, c_cflag, c_lflag, c_cc });
-          }
-          return 0; // no-op, not actually adjusting terminal settings
-        }
-        case 21519: {
-          if (!stream.tty) return -59;
-          var argp = SYSCALLS.getp();
-          HEAP32[((argp)>>2)] = 0;
-          return 0;
-        }
-        case 21520: {
-          if (!stream.tty) return -59;
-          return -28; // not supported
-        }
-        case 21531: {
-          var argp = SYSCALLS.getp();
-          return FS.ioctl(stream, op, argp);
-        }
-        case 21523: {
-          // TODO: in theory we should write to the winsize struct that gets
-          // passed in, but for now musl doesn't read anything on it
-          if (!stream.tty) return -59;
-          if (stream.tty.ops.ioctl_tiocgwinsz) {
-            var winsize = stream.tty.ops.ioctl_tiocgwinsz(stream.tty);
-            var argp = SYSCALLS.getp();
-            HEAP16[((argp)>>1)] = winsize[0];
-            HEAP16[(((argp)+(2))>>1)] = winsize[1];
-          }
-          return 0;
-        }
-        case 21524: {
-          // TODO: technically, this ioctl call should change the window size.
-          // but, since emscripten doesn't have any concept of a terminal window
-          // yet, we'll just silently throw it away as we do TIOCGWINSZ
-          if (!stream.tty) return -59;
-          return 0;
-        }
-        case 21515: {
-          if (!stream.tty) return -59;
-          return 0;
-        }
-        default: return -28; // not supported
-      }
-    } catch (e) {
-    if (typeof FS == 'undefined' || !(e.name === 'ErrnoError')) throw e;
-    return -e.errno;
-  }
-  }
-
-  function ___syscall_openat(dirfd, path, flags, varargs) {
-  SYSCALLS.varargs = varargs;
-  try {
-  
-      path = SYSCALLS.getStr(path);
-      path = SYSCALLS.calculateAt(dirfd, path);
-      var mode = varargs ? SYSCALLS.get() : 0;
-      return FS.open(path, flags, mode).fd;
-    } catch (e) {
-    if (typeof FS == 'undefined' || !(e.name === 'ErrnoError')) throw e;
-    return -e.errno;
-  }
-  }
-
-  var __emscripten_runtime_keepalive_clear = () => {
-      noExitRuntime = false;
-      runtimeKeepaliveCounter = 0;
-    };
-
-  var _abort = () => {
-      abort('native code called abort()');
-    };
-
-  var _emscripten_date_now = () => Date.now();
-
-  var _emscripten_memcpy_js = (dest, src, num) => HEAPU8.copyWithin(dest, src, src + num);
-
-  var getHeapMax = () =>
-      HEAPU8.length;
-  
-  var abortOnCannotGrowMemory = (requestedSize) => {
-      abort(`Cannot enlarge memory arrays to size ${requestedSize} bytes (OOM). Either (1) compile with -sINITIAL_MEMORY=X with X higher than the current value ${HEAP8.length}, (2) compile with -sALLOW_MEMORY_GROWTH which allows increasing the size at runtime, or (3) if you want malloc to return NULL (0) instead of this abort, compile with -sABORTING_MALLOC=0`);
-    };
-  var _emscripten_resize_heap = (requestedSize) => {
-      var oldSize = HEAPU8.length;
-      // With CAN_ADDRESS_2GB or MEMORY64, pointers are already unsigned.
-      requestedSize >>>= 0;
-      abortOnCannotGrowMemory(requestedSize);
-    };
-
-  var ENV = {
-  };
-  
-  var getExecutableName = () => {
-      return thisProgram || './this.program';
-    };
-  var getEnvStrings = () => {
-      if (!getEnvStrings.strings) {
-        // Default values.
-        // Browser language detection #8751
-        var lang = ((typeof navigator == 'object' && navigator.languages && navigator.languages[0]) || 'C').replace('-', '_') + '.UTF-8';
-        var env = {
-          'USER': 'web_user',
-          'LOGNAME': 'web_user',
-          'PATH': '/',
-          'PWD': '/',
-          'HOME': '/home/web_user',
-          'LANG': lang,
-          '_': getExecutableName()
-        };
-        // Apply the user-provided values, if any.
-        for (var x in ENV) {
-          // x is a key in ENV; if ENV[x] is undefined, that means it was
-          // explicitly set to be so. We allow user code to do that to
-          // force variables with default values to remain unset.
-          if (ENV[x] === undefined) delete env[x];
-          else env[x] = ENV[x];
-        }
-        var strings = [];
-        for (var x in env) {
-          strings.push(`${x}=${env[x]}`);
-        }
-        getEnvStrings.strings = strings;
-      }
-      return getEnvStrings.strings;
-    };
-  
-  var stringToAscii = (str, buffer) => {
-      for (var i = 0; i < str.length; ++i) {
-        assert(str.charCodeAt(i) === (str.charCodeAt(i) & 0xff));
-        HEAP8[buffer++] = str.charCodeAt(i);
-      }
-      // Null-terminate the string
-      HEAP8[buffer] = 0;
-    };
-  var _environ_get = (__environ, environ_buf) => {
-      var bufSize = 0;
-      getEnvStrings().forEach((string, i) => {
-        var ptr = environ_buf + bufSize;
-        HEAPU32[(((__environ)+(i*4))>>2)] = ptr;
-        stringToAscii(string, ptr);
-        bufSize += string.length + 1;
-      });
-      return 0;
-    };
-
-  var _environ_sizes_get = (penviron_count, penviron_buf_size) => {
-      var strings = getEnvStrings();
-      HEAPU32[((penviron_count)>>2)] = strings.length;
-      var bufSize = 0;
-      strings.forEach((string) => bufSize += string.length + 1);
-      HEAPU32[((penviron_buf_size)>>2)] = bufSize;
-      return 0;
-    };
-
-  
-  var runtimeKeepaliveCounter = 0;
-  var keepRuntimeAlive = () => noExitRuntime || runtimeKeepaliveCounter > 0;
-  var _proc_exit = (code) => {
-      EXITSTATUS = code;
-      if (!keepRuntimeAlive()) {
-        Module['onExit']?.(code);
-        ABORT = true;
-      }
-      quit_(code, new ExitStatus(code));
-    };
-  
-  /** @suppress {duplicate } */
-  /** @param {boolean|number=} implicit */
-  var exitJS = (status, implicit) => {
-      EXITSTATUS = status;
-  
-      checkUnflushedContent();
-  
-      // if exit() was called explicitly, warn the user if the runtime isn't actually being shut down
-      if (keepRuntimeAlive() && !implicit) {
-        var msg = `program exited (with status: ${status}), but keepRuntimeAlive() is set (counter=${runtimeKeepaliveCounter}) due to an async operation, so halting execution but not exiting the runtime or preventing further async execution (you can use emscripten_force_exit, if you want to force a true shutdown)`;
-        readyPromiseReject(msg);
-        err(msg);
-      }
-  
-      _proc_exit(status);
-    };
-  var _exit = exitJS;
-
   function _fd_close(fd) {
   try {
   
@@ -4393,6 +4384,8 @@ function dbg(...args) {
     return e.errno;
   }
   }
+
+  var _llvm_eh_typeid_for = (type) => type;
 
 
   var isLeapYear = (year) => year%4 === 0 && (year%100 !== 0 || year%400 === 0);
@@ -4701,6 +4694,7 @@ function dbg(...args) {
 
 
 
+
   FS.createPreloadedFile = FS_createPreloadedFile;
   FS.staticInit();;
 function checkIncomingModuleAPI() {
@@ -4712,13 +4706,21 @@ var wasmImports = {
   /** @export */
   __call_sighandler: ___call_sighandler,
   /** @export */
+  __cxa_begin_catch: ___cxa_begin_catch,
+  /** @export */
+  __cxa_end_catch: ___cxa_end_catch,
+  /** @export */
+  __cxa_find_matching_catch_2: ___cxa_find_matching_catch_2,
+  /** @export */
+  __cxa_find_matching_catch_3: ___cxa_find_matching_catch_3,
+  /** @export */
+  __cxa_rethrow: ___cxa_rethrow,
+  /** @export */
   __cxa_throw: ___cxa_throw,
   /** @export */
-  __syscall_fcntl64: ___syscall_fcntl64,
+  __cxa_uncaught_exceptions: ___cxa_uncaught_exceptions,
   /** @export */
-  __syscall_ioctl: ___syscall_ioctl,
-  /** @export */
-  __syscall_openat: ___syscall_openat,
+  __resumeException: ___resumeException,
   /** @export */
   _emscripten_runtime_keepalive_clear: __emscripten_runtime_keepalive_clear,
   /** @export */
@@ -4744,13 +4746,107 @@ var wasmImports = {
   /** @export */
   fd_write: _fd_write,
   /** @export */
+  invoke_di: invoke_di,
+  /** @export */
+  invoke_dii: invoke_dii,
+  /** @export */
+  invoke_diii: invoke_diii,
+  /** @export */
+  invoke_diiii: invoke_diiii,
+  /** @export */
+  invoke_fiii: invoke_fiii,
+  /** @export */
+  invoke_i: invoke_i,
+  /** @export */
+  invoke_ii: invoke_ii,
+  /** @export */
+  invoke_iid: invoke_iid,
+  /** @export */
+  invoke_iidd: invoke_iidd,
+  /** @export */
+  invoke_iiddi: invoke_iiddi,
+  /** @export */
+  invoke_iii: invoke_iii,
+  /** @export */
+  invoke_iiii: invoke_iiii,
+  /** @export */
+  invoke_iiiii: invoke_iiiii,
+  /** @export */
+  invoke_iiiiid: invoke_iiiiid,
+  /** @export */
+  invoke_iiiiii: invoke_iiiiii,
+  /** @export */
+  invoke_iiiiiii: invoke_iiiiiii,
+  /** @export */
+  invoke_iiiiiiii: invoke_iiiiiiii,
+  /** @export */
+  invoke_iiiiiiiii: invoke_iiiiiiiii,
+  /** @export */
+  invoke_iiiiiiiiii: invoke_iiiiiiiiii,
+  /** @export */
+  invoke_iiiiiiiiiii: invoke_iiiiiiiiiii,
+  /** @export */
+  invoke_iiiiiiiiiiii: invoke_iiiiiiiiiiii,
+  /** @export */
+  invoke_iiiiiiiiiiiii: invoke_iiiiiiiiiiiii,
+  /** @export */
+  invoke_iiiiiiiiiiiiii: invoke_iiiiiiiiiiiiii,
+  /** @export */
+  invoke_iiiiiiiiiiiiiiiii: invoke_iiiiiiiiiiiiiiiii,
+  /** @export */
+  invoke_jiiii: invoke_jiiii,
+  /** @export */
+  invoke_v: invoke_v,
+  /** @export */
+  invoke_vi: invoke_vi,
+  /** @export */
+  invoke_vid: invoke_vid,
+  /** @export */
+  invoke_viddiii: invoke_viddiii,
+  /** @export */
+  invoke_vii: invoke_vii,
+  /** @export */
+  invoke_viid: invoke_viid,
+  /** @export */
+  invoke_viii: invoke_viii,
+  /** @export */
+  invoke_viiii: invoke_viiii,
+  /** @export */
+  invoke_viiiiddiiii: invoke_viiiiddiiii,
+  /** @export */
+  invoke_viiiii: invoke_viiiii,
+  /** @export */
+  invoke_viiiiii: invoke_viiiiii,
+  /** @export */
+  invoke_viiiiiii: invoke_viiiiiii,
+  /** @export */
+  invoke_viiiiiiii: invoke_viiiiiiii,
+  /** @export */
+  invoke_viiiiiiiiii: invoke_viiiiiiiiii,
+  /** @export */
+  invoke_viiiiiiiiiii: invoke_viiiiiiiiiii,
+  /** @export */
+  invoke_viiiiiiiiiiii: invoke_viiiiiiiiiiii,
+  /** @export */
+  invoke_viiiiiiiiiiiii: invoke_viiiiiiiiiiiii,
+  /** @export */
+  invoke_viiiiiiiiiiiiii: invoke_viiiiiiiiiiiiii,
+  /** @export */
+  invoke_viiiiiiiiiiiiiii: invoke_viiiiiiiiiiiiiii,
+  /** @export */
+  invoke_viiiiiiiiiiiiiiii: invoke_viiiiiiiiiiiiiiii,
+  /** @export */
+  llvm_eh_typeid_for: _llvm_eh_typeid_for,
+  /** @export */
   proc_exit: _proc_exit,
   /** @export */
   strftime_l: _strftime_l
 };
 var wasmExports = createWasm();
 var ___wasm_call_ctors = createExportWrapper('__wasm_call_ctors');
+var ___cxa_free_exception = createExportWrapper('__cxa_free_exception');
 var _webidl_free = Module['_webidl_free'] = createExportWrapper('webidl_free');
+var _free = createExportWrapper('free');
 var _webidl_malloc = Module['_webidl_malloc'] = createExportWrapper('webidl_malloc');
 var _emscripten_bind_VoidPtr___destroy___0 = Module['_emscripten_bind_VoidPtr___destroy___0'] = createExportWrapper('emscripten_bind_VoidPtr___destroy___0');
 var _emscripten_bind_AlphaWrap_AlphaWrap_0 = Module['_emscripten_bind_AlphaWrap_AlphaWrap_0'] = createExportWrapper('emscripten_bind_AlphaWrap_AlphaWrap_0');
@@ -4763,6 +4859,8 @@ var _emscripten_bind_AlphaWrap_wrap_0 = Module['_emscripten_bind_AlphaWrap_wrap_
 var _emscripten_bind_AlphaWrap_getWrappedMeshPly_0 = Module['_emscripten_bind_AlphaWrap_getWrappedMeshPly_0'] = createExportWrapper('emscripten_bind_AlphaWrap_getWrappedMeshPly_0');
 var _emscripten_bind_AlphaWrap___destroy___0 = Module['_emscripten_bind_AlphaWrap___destroy___0'] = createExportWrapper('emscripten_bind_AlphaWrap___destroy___0');
 var _fflush = createExportWrapper('fflush');
+var _setThrew = createExportWrapper('setThrew');
+var setTempRet0 = createExportWrapper('setTempRet0');
 var _emscripten_stack_init = () => (_emscripten_stack_init = wasmExports['emscripten_stack_init'])();
 var _emscripten_stack_get_free = () => (_emscripten_stack_get_free = wasmExports['emscripten_stack_get_free'])();
 var _emscripten_stack_get_base = () => (_emscripten_stack_get_base = wasmExports['emscripten_stack_get_base'])();
@@ -4771,12 +4869,512 @@ var stackSave = createExportWrapper('stackSave');
 var stackRestore = createExportWrapper('stackRestore');
 var stackAlloc = createExportWrapper('stackAlloc');
 var _emscripten_stack_get_current = () => (_emscripten_stack_get_current = wasmExports['emscripten_stack_get_current'])();
+var ___cxa_decrement_exception_refcount = createExportWrapper('__cxa_decrement_exception_refcount');
+var ___cxa_increment_exception_refcount = createExportWrapper('__cxa_increment_exception_refcount');
+var ___get_exception_message = createExportWrapper('__get_exception_message');
+var ___cxa_can_catch = createExportWrapper('__cxa_can_catch');
 var ___cxa_is_pointer_type = createExportWrapper('__cxa_is_pointer_type');
 var dynCall_jiji = Module['dynCall_jiji'] = createExportWrapper('dynCall_jiji');
 var dynCall_viijii = Module['dynCall_viijii'] = createExportWrapper('dynCall_viijii');
+var dynCall_jiiii = Module['dynCall_jiiii'] = createExportWrapper('dynCall_jiiii');
 var dynCall_iiiiij = Module['dynCall_iiiiij'] = createExportWrapper('dynCall_iiiiij');
 var dynCall_iiiiijj = Module['dynCall_iiiiijj'] = createExportWrapper('dynCall_iiiiijj');
 var dynCall_iiiiiijj = Module['dynCall_iiiiiijj'] = createExportWrapper('dynCall_iiiiiijj');
+
+function invoke_vii(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_ii(index,a1) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iii(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viii(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiii(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viddiii(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiii(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiddi(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vi(index,a1) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiii(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiii(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiii(index,a1,a2,a3,a4,a5,a6,a7) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_v(index) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)();
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiii(index,a1,a2,a3,a4,a5,a6,a7) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_diii(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_di(index,a1) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiii(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vid(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iid(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_diiii(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viid(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_dii(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iidd(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_i(index) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)();
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiddiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiid(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_fiii(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_jiiii(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return dynCall_jiiii(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
 
 
 // include: postamble.js
@@ -4905,7 +5503,6 @@ var missingLibrarySymbols = [
   'makePromise',
   'idsToPromises',
   'makePromiseCallback',
-  'findMatchingCatch',
   'Browser_asyncPrepareDataCounter',
   'setMainLoop',
   'getSocketFromFD',
@@ -5032,6 +5629,11 @@ var unexportedSymbols = [
   'exceptionLast',
   'exceptionCaught',
   'ExceptionInfo',
+  'findMatchingCatch',
+  'getExceptionMessageCommon',
+  'incrementExceptionRefcount',
+  'decrementExceptionRefcount',
+  'getExceptionMessage',
   'Browser',
   'getPreloadedImageData__data',
   'wget',
