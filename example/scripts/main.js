@@ -24,9 +24,17 @@ let pointsToWrap;
 let wrappedMeshObj = null;
 let wrappedWireframeObj = null;
 let lastWrappedPly = null;
+let currentFileName = 'pointcloud';
 
 const plyLoader = new PLYLoader();
 const objLoader = new OBJLoader();
+
+function computeAdaptivePointSize(geometry) {
+    geometry.computeBoundingBox();
+    const size = new THREE.Vector3();
+    geometry.boundingBox.getSize(size);
+    return size.length() * 0.004;
+}
 
 function loadPointGeometry(geometry) {
     // Remove previous point cloud
@@ -35,7 +43,8 @@ function loadPointGeometry(geometry) {
     }
     clearWrappedMesh();
 
-    const material = new THREE.PointsMaterial( { color: 0x888888, size: 0.5 } );
+    const pointSize = computeAdaptivePointSize(geometry);
+    const material = new THREE.PointsMaterial( { color: 0x888888, size: pointSize } );
     const points = new THREE.Points( geometry, material );
     pointsToWrap = points;
     scene.add(points);
@@ -143,6 +152,8 @@ function tryWrap() {
         let wireframe = new THREE.WireframeGeometry(geometry);
         wrappedWireframeObj = new THREE.LineSegments(wireframe, lineSegmentMaterial);
 
+        wrappedMeshObj.visible = alphaWrapParams.showWrapped;
+        wrappedWireframeObj.visible = alphaWrapParams.showWrapped;
         scene.add(wrappedMeshObj);
         scene.add(wrappedWireframeObj);
 
@@ -162,6 +173,8 @@ function uploadPointCloud() {
     input.onchange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        currentFileName = file.name.replace(/\.[^.]+$/, '');
 
         const reader = new FileReader();
         const ext = file.name.split('.').pop().toLowerCase();
@@ -203,9 +216,18 @@ function downloadResult() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'wrapped.ply';
+    a.download = `${currentFileName}-wrapped.ply`;
     a.click();
     URL.revokeObjectURL(url);
+}
+
+function clearCanvas() {
+    if (pointsToWrap) {
+        scene.remove(pointsToWrap);
+        pointsToWrap = null;
+    }
+    clearWrappedMesh();
+    currentFileName = 'pointcloud';
 }
 
 let alphaWrapParams = {
@@ -213,14 +235,21 @@ let alphaWrapParams = {
     offset: 300,
     wrap: tryWrap,
     upload: uploadPointCloud,
+    clear: clearCanvas,
     download: downloadResult,
+    showWrapped: true,
     wrapStatus: "Not wrapped"
 }
 
 const gui = new GUI();
+gui.add(alphaWrapParams, 'upload').name('Upload PLY/OBJ');
 gui.add(alphaWrapParams, 'alpha', 0, 100);
 gui.add(alphaWrapParams, 'offset', 0, 1000);
 gui.add(alphaWrapParams, 'wrap');
-gui.add(alphaWrapParams, 'upload').name('Upload PLY/OBJ');
 gui.add(alphaWrapParams, 'download').name('Download Result');
+gui.add(alphaWrapParams, 'clear').name('Clear');
+gui.add(alphaWrapParams, 'showWrapped').name('Show Wrapped').onChange((v) => {
+    if (wrappedMeshObj) wrappedMeshObj.visible = v;
+    if (wrappedWireframeObj) wrappedWireframeObj.visible = v;
+});
 gui.add(alphaWrapParams, 'wrapStatus').name('Status').listen();
