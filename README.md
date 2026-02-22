@@ -1,43 +1,113 @@
 # Alpha Wrap for Javascript
-Port CGAL::alpha_shape_3 to Javascript using Emscripten
+Port CGAL::alpha_shape_3 to Javascript using Emscripten.
 
-(everything is under construction)
+## Demo
+[https://petingo.cc/alpha-wrap-js/example/](https://petingo.cc/alpha-wrap-js/example/)
 
-## Build for first time
+![](ScreenRecording.gif)
+
+## Prerequisites
+
+- [Emscripten SDK (emsdk)](https://emscripten.org/docs/getting_started/downloads.html) installed and activated
+- GMP and MPFR compiled with Emscripten (paths configured in `CMakeLists.txt` as `gmp-em` / `mpfr-em`)
+- GMP and MPFR compiled natively (paths configured in `CMakeLists.txt` as `gmp-c` / `mpfr-c`)
+- Boost headers (header-only, path configured in `CMakeLists.txt`)
+- CGAL 5.6 headers (path configured in `CMakeLists.txt`)
+
+## First-time setup
+
+### 1. Generate WebIDL glue code
+
+Only needed once, or whenever `src/WebIDL/alpha_wrap.idl` changes. Run from the project root:
 ```
-python3 /home/wsl/emscripten/tools/webidl_binder.py ./alpha_wrap.idl alpha_wrap_glue
+source /path/to/emsdk/emsdk_env.sh
+python3 $EMSDK/upstream/emscripten/tools/webidl_binder.py \
+    src/WebIDL/alpha_wrap.idl src/WebIDL/alpha_wrap_glue
+```
+This generates `src/WebIDL/alpha_wrap_glue.cpp` and `src/WebIDL/alpha_wrap_glue.js`.
 
-cmake --build . --target alpha_wrap
+### 2. Configure the Emscripten (WASM) build
+
+Only needed once (or after changing `CMakeLists.txt`). Run from the project root:
+```
+source /path/to/emsdk/emsdk_env.sh
+mkdir -p build && cd build
+emcmake cmake ..
 ```
 
-## Build for web
+## Build for web (WASM)
+
 ```
+source /path/to/emsdk/emsdk_env.sh
 cd build
 cmake --build . --target alpha_wrap
 ```
-`alpha_wrap.js` and `alpha_wrap.wasm` will be generated.
 
-
-## Run the C++ test
+This produces `build/alpha_wrap.js` and `build/alpha_wrap.wasm`. Copy them to the example:
 ```
-cd cmake-build-debug
-cmake .. && cmake --build .
+cp build/alpha_wrap.js build/alpha_wrap.wasm example/scripts/
+```
+
+## Run the C++ test (native)
+
+```
+mkdir -p cmake-build-debug && cd cmake-build-debug
+cmake ..
+cmake --build .
 ./alpha_wrap_test
 ```
 
 ## Run the example web page
 ```
 cd example
-python3 -m http.server 8000
+npx server ./
 ```
 Then open http://localhost:8000 in your browser.
 
-## Example
-- Before wrapping
-![](point_cloud.png)
-- After wrapping
-![](mesh.png)
+## Using the WASM module in a web app
 
+The build outputs an ES6 module (`alpha_wrap.js`) that wraps the WASM binary. To use it:
+
+### 1. Serve both files from the same directory
+
+`alpha_wrap.js` and `alpha_wrap.wasm` must be served together (e.g. both in `example/scripts/`).
+
+### 2. Reference it via an import map
+
+In your HTML, declare an import map so you can import it by name:
+```html
+<script type="importmap">
+{
+  "imports": {
+    "AlphaWrap": "./scripts/alpha_wrap.js"
+  }
+}
+</script>
+<script type="module" src="scripts/main.js"></script>
+```
+
+> **Note:** Use a relative path (`./scripts/alpha_wrap.js`), not an absolute path (`/scripts/alpha_wrap.js`), so it works on both `localhost` and hosted subdirectories (e.g. GitHub Pages).
+
+### 3. Load the module and instantiate
+
+```js
+import { default as createAlphaWrapModule } from 'AlphaWrap';
+
+createAlphaWrapModule().then(AlphaWrap => {
+    const alphaWrap = new AlphaWrap.AlphaWrap(alpha, offset);
+
+    // Add points
+    alphaWrap.addPoint(x, y, z);
+
+    // Run the wrap
+    alphaWrap.wrap();
+
+    // Get the result as a PLY string
+    const plyString = alphaWrap.getWrappedMeshPly();
+});
+```
+
+See `example/scripts/main.js` for a full working example with three.js.
 
 ## CGAL Fixes for WebAssembly
 
@@ -94,6 +164,29 @@ endif()
 Do **not** define `CGAL_ALWAYS_ROUND_TO_NEAREST` globally — it changes interval arithmetic behavior for native builds and can cause precondition failures there.
 
 Also do **not** manually define `CGAL_USE_SSE2` — CGAL auto-detects it, and it conflicts with `CGAL_ALWAYS_ROUND_TO_NEAREST` (see `FPU.h` line ~120).
+
+### Problem: Invalid inline asm constraint `+x` in WASM
+
+CGAL's `FPU.h` uses inline assembly to prevent the compiler from optimizing away floating-point operations (a memory/register barrier). On x86 with SSE2, it uses the `+x` constraint which targets SSE registers:
+
+```cpp
+// FPU.h — original
+# ifdef CGAL_HAS_SSE2
+  asm volatile ("" : "+x"(x) );  // +x = SSE register constraint
+```
+
+The Emscripten/WASM target does not support the `+x` register constraint, causing a compile error:
+
+```
+error: invalid output constraint '+x' in asm
+```
+
+**Fix:** Replace `+x` with `+m` (memory constraint), which is valid on all targets and still prevents the compiler from optimizing across the barrier:
+
+```cpp
+# ifdef CGAL_HAS_SSE2
+  asm volatile ("" : "+m"(x) );  // +m = memory constraint, works in WASM
+```
 
 ## Reference
 - [Official tutorial](https://emscripten.org/docs/porting/connecting_cpp_and_javascript/WebIDL-Binder.html)
