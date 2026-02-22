@@ -48,6 +48,7 @@ function loadPointGeometry(geometry) {
     const points = new THREE.Points( geometry, material );
     pointsToWrap = points;
     scene.add(points);
+    alphaWrapParams.wrapStatus = "Ready to wrap";
 }
 
 function clearWrappedMesh() {
@@ -128,42 +129,42 @@ function tryWrap() {
     }
 
     alphaWrapParams.wrapStatus = "Wrapping...";
-    gui.controllersRecursive().forEach(c => c.updateDisplay());
 
-    try {
-        alphaWrap.setAlpha(alphaWrapParams.alpha);
-        alphaWrap.setOffset(alphaWrapParams.offset);
-        feedPoints();
+    // Defer the actual computation so the browser can repaint with "Wrapping..." first
+    setTimeout(() => {
+        try {
+            alphaWrap.setAlpha(alphaWrapParams.alpha);
+            alphaWrap.setOffset(alphaWrapParams.offset);
+            feedPoints();
 
-        let s = alphaWrap.wrap();
-        console.log("Wrap result:", s);
+            let s = alphaWrap.wrap();
+            console.log("Wrap result:", s);
 
-        clearWrappedMesh();
+            clearWrappedMesh();
 
-        let wrappedPlyString = alphaWrap.getWrappedMeshPly();
-        lastWrappedPly = wrappedPlyString;
+            let wrappedPlyString = alphaWrap.getWrappedMeshPly();
+            lastWrappedPly = wrappedPlyString;
 
-        let geometry = plyLoader.parse(wrappedPlyString);
+            let geometry = plyLoader.parse(wrappedPlyString);
 
-        let meshMaterial = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
-        wrappedMeshObj = new THREE.Mesh( geometry, meshMaterial );
+            let meshMaterial = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
+            wrappedMeshObj = new THREE.Mesh( geometry, meshMaterial );
 
-        let lineSegmentMaterial = new THREE.LineBasicMaterial( { color: 0x000000 } );
-        let wireframe = new THREE.WireframeGeometry(geometry);
-        wrappedWireframeObj = new THREE.LineSegments(wireframe, lineSegmentMaterial);
+            let lineSegmentMaterial = new THREE.LineBasicMaterial( { color: 0x000000 } );
+            let wireframe = new THREE.WireframeGeometry(geometry);
+            wrappedWireframeObj = new THREE.LineSegments(wireframe, lineSegmentMaterial);
 
-        wrappedMeshObj.visible = alphaWrapParams.showWrapped;
-        wrappedWireframeObj.visible = alphaWrapParams.showWrapped;
-        scene.add(wrappedMeshObj);
-        scene.add(wrappedWireframeObj);
+            wrappedMeshObj.visible = alphaWrapParams.showWrapped;
+            wrappedWireframeObj.visible = alphaWrapParams.showWrapped;
+            scene.add(wrappedMeshObj);
+            scene.add(wrappedWireframeObj);
 
-        alphaWrapParams.wrapStatus = "Done";
-    } catch (e) {
-        console.error("Wrap failed:", e);
-        alphaWrapParams.wrapStatus = "Failed";
-    }
-
-    gui.controllersRecursive().forEach(c => c.updateDisplay());
+            alphaWrapParams.wrapStatus = "Wrap done";
+        } catch (e) {
+            console.error("Wrap failed:", e);
+            alphaWrapParams.wrapStatus = "Failed";
+        }
+    }, 0);
 }
 
 function uploadPointCloud() {
@@ -228,6 +229,7 @@ function clearCanvas() {
     }
     clearWrappedMesh();
     currentFileName = 'pointcloud';
+    alphaWrapParams.wrapStatus = "No model";
 }
 
 let alphaWrapParams = {
@@ -238,11 +240,11 @@ let alphaWrapParams = {
     clear: clearCanvas,
     download: downloadResult,
     showWrapped: true,
-    wrapStatus: "Not wrapped"
+    wrapStatus: "No model"
 }
 
 const gui = new GUI();
-gui.add(alphaWrapParams, 'upload').name('Upload PLY/OBJ');
+gui.add(alphaWrapParams, 'upload').name('Upload point cloud (.ply/.obj)');
 gui.add(alphaWrapParams, 'alpha', 0, 100);
 gui.add(alphaWrapParams, 'offset', 0, 1000);
 gui.add(alphaWrapParams, 'wrap');
