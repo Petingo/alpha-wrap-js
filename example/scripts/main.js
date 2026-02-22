@@ -65,7 +65,7 @@ function clearWrappedMesh() {
 
 // Load default point cloud
 plyLoader.load(
-    'assets/torus_cube.ply',
+    'assets/cube_sphere.ply',
     function (geometry) {
         loadPointGeometry(geometry);
     },
