@@ -64,6 +64,36 @@ npx server ./
 ```
 Then open http://localhost:8000 in your browser.
 
+## Use from another website
+
+The compiled files are deployed to GitHub Pages alongside the demo. You can import the library directly from any website without copying the WASM binary — it loads automatically from the same GitHub Pages origin.
+
+### Import map
+
+Add this to your HTML `<head>` before any module scripts:
+
+```html
+<script type="importmap">
+  { "imports": { "alpha-wrap-js": "https://petingo.github.io/alpha-wrap-js/example/alpha-wrap-lib.js" } }
+</script>
+```
+
+### Usage
+
+```javascript
+import { createAlphaWrap } from 'alpha-wrap-js';
+
+const wrap = await createAlphaWrap(10, 300);  // alpha, offset
+
+wrap.addPoint(x, y, z);  // add all your points
+wrap.wrap();              // run the algorithm
+const ply = wrap.getWrappedMeshPly();  // get result as PLY string
+```
+
+`alpha_wrap.wasm` is fetched automatically from GitHub Pages alongside the JS — no extra configuration needed.
+
+---
+
 ## Using the WASM module in a web app
 
 The build outputs an ES6 module (`alpha_wrap.js`) that wraps the WASM binary. To use it:
